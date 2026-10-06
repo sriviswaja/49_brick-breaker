@@ -1,4 +1,6 @@
 import pygame
+import math
+import array
 from .paddle import Paddle
 from .ball import Ball
 from .brick import Brick
@@ -16,14 +18,51 @@ BRICK_COLORS = [
 ]
 
 class GameEngine:
-    def __init__(self, width, height):
+    def __init__(self, width, height, difficulty="medium"):
         self.width = width
         self.height = height
+        self.difficulty = difficulty
+        self.selected_difficulty = None
 
-        self.paddle = Paddle(width // 2 - 50, height - 30, 100, 14)
+        self.game_over = False
+        self.result = None
+        self.exit_requested = False
+        self.selected_difficulty = None
+
+        self.sound_enabled = pygame.mixer.get_init() is not None
+
+        if self.sound_enabled:
+            self.brick_sound = self._create_sound(700, 0.08, 0.25)
+            self.paddle_sound = self._create_sound(400, 0.08, 0.25)
+            self.wall_sound = self._create_sound(250, 0.05, 0.20)
+            self.game_over_sound = self._create_sound(150, 0.40, 0.30)
+        else:
+            self.brick_sound = None
+            self.paddle_sound = None
+            self.wall_sound = None
+            self.game_over_sound = None
+
+
+        if difficulty == "easy":
+            self.ball_speed = 3
+            paddle_width = 120
+        elif difficulty == "hard":
+            self.ball_speed = 6
+            paddle_width = 80
+        else:
+            self.ball_speed = 4
+            paddle_width = 100
+
+        self.paddle = Paddle(
+            width // 2 - paddle_width // 2,
+            height - 30,
+            paddle_width,
+            14
+        )
 
         self.ball = Ball(width // 2, height - 50, radius=8)
-        self.ball.vx, self.ball.vy = 4, -4
+        self.ball.vx = self.ball_speed
+        self.ball.vy = -self.ball_speed
 
         self.rows, self.cols = 5, 8
         self.bricks = self._build_bricks(self.rows, self.cols)
@@ -34,6 +73,23 @@ class GameEngine:
         self.game_over = False
         self.result = None
         self.exit_requested = False  # "win" or "lose"
+
+    def _create_sound(self, frequency, duration, volume=0.3):
+        sample_rate = 44100
+        sample_count = int(sample_rate * duration)
+
+        samples = array.array("h")
+
+        for i in range(sample_count):
+            time = i / sample_rate
+            value = int(
+                32767
+                * volume
+                * math.sin(2 * math.pi * frequency * time)
+            )
+            samples.append(value)
+
+        return pygame.mixer.Sound(buffer=samples)    
 
     def _build_bricks(self, rows, cols):
         bricks = []
@@ -48,11 +104,25 @@ class GameEngine:
         return bricks
 
     def handle_event(self, event):
-        def handle_event(self, event):
-            if self.game_over:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                        self.exit_requested = True
+        if not self.game_over:
+            return
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_1:
+                self.selected_difficulty = "easy"
+                self.exit_requested = True
+
+            elif event.key == pygame.K_2:
+                self.selected_difficulty = "medium"
+                self.exit_requested = True
+
+            elif event.key == pygame.K_3:
+                self.selected_difficulty = "hard"
+                self.exit_requested = True
+
+            elif event.key == pygame.K_4:
+                self.selected_difficulty = None
+                self.exit_requested = True
 
     def handle_input(self):
         if self.game_over:
@@ -74,25 +144,31 @@ class GameEngine:
 
         if self.ball.x - self.ball.radius <= 0 or self.ball.x + self.ball.radius >= self.width:
             self.ball.vx *= -1
+            self.play_sound(self.wall_sound)
+
         if self.ball.y - self.ball.radius <= 0:
             self.ball.vy *= -1
+            self.play_sound(self.wall_sound)
 
         # Paddle collision
         if self.ball.rect().colliderect(self.paddle.rect()):
             current_rect = self.ball.rect()
             paddle_rect = self.paddle.rect()
+            
 
             # Determine whether the ball hit the horizontal or vertical side
             if previous_rect.right <= paddle_rect.left or previous_rect.left >= paddle_rect.right:
                 self.ball.vx *= -1
             else:
                 self.ball.vy *= -1
+            self.play_sound(self.paddle_sound)
 
         # Brick collisions
         for brick in self.bricks:
             if brick.alive and self.ball.rect().colliderect(brick.rect()):
                 brick.alive = False
                 self.score += 1
+                self.play_sound(self.brick_sound)
 
                 current_rect = self.ball.rect()
                 brick_rect = brick.rect()
@@ -110,17 +186,19 @@ class GameEngine:
             if self.lives <= 0:
                 self.game_over = True
                 self.result = "lose"
+                self.play_sound(self.game_over_sound)
             else:
                 self._reset_ball()
 
         if all(not b.alive for b in self.bricks):
             self.game_over = True
             self.result = "win"
+            self.play_sound(self.game_over_sound)
 
     def _reset_ball(self):
         self.ball.x, self.ball.y = self.width // 2, self.height - 50
-        self.ball.vx, self.ball.vy = 4, -4
-
+        self.ball.vx = self.ball_speed
+        self.ball.vy = -self.ball_speed
     def render(self, screen):
         screen.fill(BG)
 
@@ -158,10 +236,11 @@ class GameEngine:
             )
 
             instruction_text = self.font.render(
-                "Press ENTER or SPACE to exit",
+                "1: Easy   2: Medium   3: Hard   4: Exit",
                 True,
                 WHITE
             )
+            
 
             screen.blit(
                 result_text,
@@ -183,3 +262,7 @@ class GameEngine:
                     center=(self.width // 2, self.height // 2 + 60)
                 )
             )
+
+    def play_sound(self, sound):
+        if self.sound_enabled and sound is not None:
+            sound.play()        
