@@ -18,6 +18,7 @@ engine = GameEngine(WIDTH, HEIGHT)
 
 def main():
     running = True
+    engine = GameEngine(WIDTH, HEIGHT)
 
     while running:
         for event in pygame.event.get():
@@ -27,7 +28,15 @@ def main():
             engine.handle_event(event)
 
         if engine.exit_requested:
-            running = False
+            if engine.selected_difficulty is None:
+                running = False
+            else:
+                selected_difficulty = engine.selected_difficulty
+                engine = GameEngine(
+                    WIDTH,
+                    HEIGHT,
+                    difficulty=selected_difficulty
+                )
 
         engine.handle_input()
         engine.update()
