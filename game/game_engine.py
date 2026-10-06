@@ -32,7 +32,8 @@ class GameEngine:
         self.score = 0
         self.font = pygame.font.SysFont("Arial", 28)
         self.game_over = False
-        self.result = None  # "win" or "lose"
+        self.result = None
+        self.exit_requested = False  # "win" or "lose"
 
     def _build_bricks(self, rows, cols):
         bricks = []
@@ -47,9 +48,11 @@ class GameEngine:
         return bricks
 
     def handle_event(self, event):
-        # This game only needs continuously-held-key input for the
-        # paddle, handled in handle_input each frame.
-        pass
+        def handle_event(self, event):
+            if self.game_over:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                        self.exit_requested = True
 
     def handle_input(self):
         if self.game_over:
@@ -64,6 +67,9 @@ class GameEngine:
         if self.game_over:
             return
 
+        # Store the ball's position before moving
+        previous_rect = self.ball.rect()
+
         self.ball.move()
 
         if self.ball.x - self.ball.radius <= 0 or self.ball.x + self.ball.radius >= self.width:
@@ -71,22 +77,32 @@ class GameEngine:
         if self.ball.y - self.ball.radius <= 0:
             self.ball.vy *= -1
 
+        # Paddle collision
         if self.ball.rect().colliderect(self.paddle.rect()):
-            # NOTE: always flips the ball's vertical velocity on a
-            # paddle collision, regardless of which side of the paddle
-            # was actually hit. See Task 1 in the README.
-            self.ball.vy *= -1
+            current_rect = self.ball.rect()
+            paddle_rect = self.paddle.rect()
 
+            # Determine whether the ball hit the horizontal or vertical side
+            if previous_rect.right <= paddle_rect.left or previous_rect.left >= paddle_rect.right:
+                self.ball.vx *= -1
+            else:
+                self.ball.vy *= -1
+
+        # Brick collisions
         for brick in self.bricks:
             if brick.alive and self.ball.rect().colliderect(brick.rect()):
                 brick.alive = False
                 self.score += 1
-                # NOTE: same unconditional vertical-velocity flip as
-                # the paddle collision above - a brick hit from the
-                # left or right should redirect the ball sideways
-                # (flip vx), but this always flips vy instead. See
-                # Task 1 in the README.
-                self.ball.vy *= -1
+
+                current_rect = self.ball.rect()
+                brick_rect = brick.rect()
+
+                # Determine which side of the brick was hit
+                if previous_rect.right <= brick_rect.left or previous_rect.left >= brick_rect.right:
+                    self.ball.vx *= -1
+                else:
+                    self.ball.vy *= -1
+
                 break
 
         if self.ball.y - self.ball.radius > self.height:
@@ -122,10 +138,48 @@ class GameEngine:
         lives_text = self.font.render(f"Lives: {self.lives}", True, WHITE)
         screen.blit(lives_text, (self.width - 130, 10))
 
-        if self.game_over and not getattr(self, "_game_over_logged", False):
-            # NOTE: no proper end screen yet - see Task 2 in the README.
+        if self.game_over:
+            # Dark overlay
+            overlay = pygame.Surface((self.width, self.height))
+            overlay.set_alpha(180)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, (0, 0))
+
+            # Win or lose message
             if self.result == "win":
-                print("You win! Final score:", self.score)
+                result_text = self.font.render("YOU WIN!", True, WHITE)
             else:
-                print("Game over! Final score:", self.score)
-            self._game_over_logged = True
+                result_text = self.font.render("GAME OVER", True, WHITE)
+
+            score_text = self.font.render(
+                f"Final Score: {self.score}",
+                True,
+                WHITE
+            )
+
+            instruction_text = self.font.render(
+                "Press ENTER or SPACE to exit",
+                True,
+                WHITE
+            )
+
+            screen.blit(
+                result_text,
+                result_text.get_rect(
+                    center=(self.width // 2, self.height // 2 - 60)
+                )
+            )
+
+            screen.blit(
+                score_text,
+                score_text.get_rect(
+                    center=(self.width // 2, self.height // 2)
+                )
+            )
+
+            screen.blit(
+                instruction_text,
+                instruction_text.get_rect(
+                    center=(self.width // 2, self.height // 2 + 60)
+                )
+            )

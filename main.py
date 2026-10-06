@@ -18,11 +18,16 @@ engine = GameEngine(WIDTH, HEIGHT)
 
 def main():
     running = True
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
             engine.handle_event(event)
+
+        if engine.exit_requested:
+            running = False
 
         engine.handle_input()
         engine.update()
